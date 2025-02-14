@@ -1,18 +1,61 @@
-import React, { useState } from 'react';
-import { Code2, Package } from 'lucide-react';
+import React, { useState, useRef, useMemo } from 'react';
+import { Code2, Package, Search } from 'lucide-react';
+import { createAutocomplete } from '@algolia/autocomplete-core';
+import algoliasearch from 'algoliasearch';
 
-const SAMPLE_PRODUCTS = [
-  { id: 'PRD001', name: 'Premium Coffee Maker' },
-  { id: 'PRD002', name: 'Wireless Earbuds Pro' },
-  { id: 'PRD003', name: 'Smart Fitness Watch' },
-  { id: 'PRD004', name: 'Ultra HD Gaming Monitor' },
-  { id: 'PRD005', name: 'Ergonomic Office Chair' },
-];
+interface Product {
+  objectID: string;
+  name: string;
+  upc: string;
+  productName: string;
+}
+
+const searchClient = algoliasearch(
+  import.meta.env.VITE_ALGOLIA_APP_ID,
+  import.meta.env.VITE_ALGOLIA_API_KEY
+);
 
 const ProductWidget = () => {
-  const [selectedProduct, setSelectedProduct] = useState(SAMPLE_PRODUCTS[0].id);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const baseUrl = import.meta.env.VITE_PRODUCT_WIDGET_URL?.replace(/\/+$/, '');
-  const widgetUrl = `${baseUrl}?id=${selectedProduct}`;
+  const widgetUrl = `${baseUrl}?upc=${selectedProduct?.upc || ''}`;
+  const [autocompleteState, setAutocompleteState] = useState({});
+  const inputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const autocomplete = useMemo(
+    () =>
+      createAutocomplete({
+        onStateChange({ state }) {
+          setAutocompleteState(state);
+        },
+        getSources() {
+          return [
+            {
+              sourceId: 'products',
+              getItems({ query }) {
+                return searchClient
+                  .initIndex(import.meta.env.VITE_ALGOLIA_INDEX_NAME)
+                  .search(query, {
+                    hitsPerPage: 15
+                  })
+                  .then((response) => response.hits as Product[]);
+              },
+            },
+          ];
+        },
+      }),
+    []
+  );
+
+  const { onSubmit, onReset, onKeyDown } = autocomplete.getFormProps({
+    inputElement: inputRef.current,
+  });
+
+  const { onFocus, onBlur, onChange } = autocomplete.getInputProps({
+    inputElement: inputRef.current,
+  });
 
   const iframeCode = `<iframe
   src="${widgetUrl}"
@@ -54,21 +97,51 @@ const ProductWidget = () => {
           </div>
           
           <div className="mb-4">
-            <label htmlFor="product" className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Select Product
             </label>
-            <select
-              id="product"
-              value={selectedProduct}
-              onChange={(e) => setSelectedProduct(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              {SAMPLE_PRODUCTS.map((product) => (
-                <option key={product.id} value={product.id}>
-                  {product.name} ({product.id})
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <form 
+                ref={formRef}
+                onSubmit={onSubmit}
+                onReset={onReset}
+                onKeyDown={onKeyDown}
+                className="relative"
+              >
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                  <input
+                    ref={inputRef}
+                    onFocus={onFocus}
+                    onBlur={onBlur}
+                    onChange={onChange}
+                    value={selectedProduct ? (selectedProduct.productName || selectedProduct.name) : ''}
+                    placeholder="Search for a product..."
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                {autocompleteState.isOpen && (
+                  <div
+                    ref={panelRef}
+                    className="absolute z-10 mt-1 w-full bg-white shadow-lg rounded-md border border-gray-200 py-1"
+                  >
+                    {(autocompleteState as any).collections?.[0]?.items?.map((item: Product) => (
+                      <button
+                        key={item.objectID}
+                        className="w-full px-4 py-2 text-left hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
+                        onClick={() => {
+                          setSelectedProduct(item);
+                          autocomplete.setIsOpen(false);
+                        }}
+                      >
+                        <div className="font-medium">{item.productName || item.name}</div>
+                        <div className="text-sm text-gray-500">UPC: {item.upc}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </form>
+            </div>
           </div>
 
           <div className="relative">
