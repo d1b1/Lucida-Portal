@@ -10,15 +10,7 @@ const Navbar = () => {
           <Layout className="h-6 w-6" />
           <span className="text-xl font-bold">Widget Dashboard</span>
         </div>
-        <div className="space-x-6">
-          <NavLink
-            to="/product-widget"
-            className={({ isActive }) =>
-              `hover:text-gray-300 ${isActive ? 'text-blue-400' : ''}`
-            }
-          >
-            Product Widget
-          </NavLink>
+        <div>
           <NavLink
             to="/brand-widget"
             className={({ isActive }) =>
