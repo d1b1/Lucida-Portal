@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Code2, Package, Search } from 'lucide-react';
 import { createAutocomplete } from '@algolia/autocomplete-core';
 import algoliasearch from 'algoliasearch';
@@ -23,6 +23,26 @@ const ProductWidget = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const storageKey = `${import.meta.env.VITE_BRAND_NAME}_UPC`;
+
+  // Load the saved UPC from localStorage on component mount
+  useEffect(() => {
+    const savedUpc = localStorage.getItem(storageKey);
+    if (savedUpc && !selectedProduct) {
+      // Fetch the product details from Algolia using the saved UPC
+      searchClient
+        .initIndex(import.meta.env.VITE_ALGOLIA_INDEX_NAME)
+        .search('', {
+          filters: `upc:${savedUpc}`,
+          hitsPerPage: 1
+        })
+        .then((response) => {
+          if (response.hits.length > 0) {
+            setSelectedProduct(response.hits[0] as Product);
+          }
+        });
+    }
+  }, []);
 
   const autocomplete = useMemo(
     () =>
@@ -57,10 +77,17 @@ const ProductWidget = () => {
     inputElement: inputRef.current,
   });
 
+  const handleProductSelect = (item: Product) => {
+    setSelectedProduct(item);
+    autocomplete.setIsOpen(false);
+    // Save the selected UPC to localStorage
+    localStorage.setItem(storageKey, item.upc);
+  };
+
   const iframeCode = `<iframe
   src="${widgetUrl}"
   width="100%"
-  height="600"
+  height="800"
   style="border: none;"
   title="Product Widget"
   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -129,10 +156,7 @@ const ProductWidget = () => {
                       <button
                         key={item.objectID}
                         className="w-full px-4 py-2 text-left hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
-                        onClick={() => {
-                          setSelectedProduct(item);
-                          autocomplete.setIsOpen(false);
-                        }}
+                        onClick={() => handleProductSelect(item)}
                       >
                         <div className="font-medium">{item.productName || item.name}</div>
                         <div className="text-sm text-gray-500">UPC: {item.upc}</div>
@@ -144,36 +168,50 @@ const ProductWidget = () => {
             </div>
           </div>
 
-          <div className="relative">
-            <pre className="bg-gray-50 p-4 rounded-lg text-sm overflow-x-auto">
-              <code>{iframeCode}</code>
-            </pre>
-            <button
-              onClick={() => navigator.clipboard.writeText(iframeCode)}
-              className="absolute top-2 right-2 px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-            >
-              Copy
-            </button>
-          </div>
+          {selectedProduct ? (
+            <div className="relative">
+              <pre className="bg-gray-50 p-4 rounded-lg text-sm overflow-x-auto">
+                <code>{iframeCode}</code>
+              </pre>
+              <button
+                onClick={() => navigator.clipboard.writeText(iframeCode)}
+                className="absolute top-2 right-2 px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+              >
+                Copy
+              </button>
+            </div>
+          ) : (
+            <div className="bg-gray-50 p-4 rounded-lg text-center">
+              <p className="text-gray-600">Please select a product to view the embed code.</p>
+            </div>
+          )}
         </div>
       </div>
 
       <div className="bg-white p-4 rounded-lg shadow-lg max-w-6xl mx-auto">
-        <div className="text-sm text-gray-600 mb-2">
-          Widget URL: {widgetUrl}
-        </div>
-        <div className="w-full">
-          <iframe
-            src={widgetUrl}
-            width="100%"
-            height="600"
-            style={{ border: 'none' }}
-            className="rounded-lg"
-            title="Product Widget"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-          />
-        </div>
+        {selectedProduct ? (
+          <>
+            <div className="text-sm text-gray-600 mb-2">
+              Widget URL: {widgetUrl}
+            </div>
+            <div className="w-full">
+              <iframe
+                src={widgetUrl}
+                width="100%"
+                height="800"
+                style={{ border: 'none' }}
+                className="rounded-lg"
+                title="Product Widget"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+              />
+            </div>
+          </>
+        ) : (
+          <div className="text-center py-12">
+            <p className="text-gray-600 text-lg">Start by selecting a product above to preview the widget.</p>
+          </div>
+        )}
       </div>
     </div>
   );
